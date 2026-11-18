@@ -8,7 +8,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
 EMBED_MODEL = "models/gemini-embedding-001"
-CHAT_MODEL = "gemini-2.0-flash"
+CHAT_MODEL = "gemini-3.8-flash"
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
 TOP_K = 4
@@ -16,9 +16,9 @@ FALLBACK = "I don't have that information in the documents."
 
 # Candidate chat models to try in case a specific model is unavailable for the API key / region
 FALLBACK_MODELS = [
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
 ]
 
 
@@ -89,7 +89,7 @@ Answer:"""
             content = response.content
             if isinstance(content, list):
                 text_parts = [
-                    part["text"] if isinstance(part, dict) and "text" in part else str(part)
+                    part["text"] if isinstance(part, dict) and "text" in part else getattr(part, "text", str(part))
                     for part in content
                 ]
                 content = "".join(text_parts)
