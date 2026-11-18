@@ -8,11 +8,18 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
 EMBED_MODEL = "models/gemini-embedding-001"
-CHAT_MODEL = "gemini-1.5-flash"
+CHAT_MODEL = "gemini-2.0-flash"
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
 TOP_K = 4
 FALLBACK = "I don't have that information in the documents."
+
+# Candidate chat models to try in case a specific model is unavailable for the API key / region
+FALLBACK_MODELS = [
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+]
 
 
 def read_file(name, data):
@@ -50,8 +57,8 @@ def build_store(docs, api_key):
     return InMemoryVectorStore.from_documents(chunks, embeddings), len(chunks)
 
 
-def make_llm(api_key):
-    return ChatGoogleGenerativeAI(model=CHAT_MODEL, temperature=0.1, google_api_key=api_key)
+def make_llm(api_key, model=CHAT_MODEL):
+    return ChatGoogleGenerativeAI(model=model, temperature=0.1, google_api_key=api_key)
 
 
 def ask(question, store, llm):
@@ -68,4 +75,29 @@ Question:
 {question}
 
 Answer:"""
-    return llm.invoke(prompt).content, docs
+
+    # Extract API key to support fallback models if the primary model returns 404
+    api_key_val = getattr(llm.google_api_key, "get_secret_value", lambda: str(llm.google_api_key))()
+    primary_model = getattr(llm, "model", CHAT_MODEL)
+    models_to_try = [primary_model] + [m for m in FALLBACK_MODELS if m != primary_model]
+
+    last_err = None
+    for model_name in models_to_try:
+        try:
+            curr_llm = ChatGoogleGenerativeAI(model=model_name, temperature=0.1, google_api_key=api_key_val)
+            response = curr_llm.invoke(prompt)
+            content = response.content
+            if isinstance(content, list):
+                text_parts = [
+                    part["text"] if isinstance(part, dict) and "text" in part else str(part)
+                    for part in content
+                ]
+                content = "".join(text_parts)
+            return content, docs
+        except Exception as e:
+            last_err = e
+            continue
+
+    if last_err:
+        raise last_err
+    return FALLBACK, docs

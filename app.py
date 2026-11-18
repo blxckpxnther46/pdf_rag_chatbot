@@ -22,6 +22,10 @@ api_key = st.sidebar.text_input(
 )
 uploads = st.sidebar.file_uploader("Upload your own documents (optional)", type=["pdf", "txt", "md"], accept_multiple_files=True)
 
+if st.sidebar.button("🔄 Reset / Clear Session"):
+    st.session_state.clear()
+    st.rerun()
+
 if not api_key:
     st.info("Paste your Gemini API key in the sidebar to start. Your key is used only to talk to Gemini and is never saved.")
     st.stop()
@@ -40,19 +44,31 @@ if not docs:
     st.stop()
 
 # ---- build the index once per key + document set, per visitor ----
-if st.session_state.get("signature") != signature:
+if st.session_state.get("signature") != signature or "store" not in st.session_state:
     try:
         with st.spinner("Reading and indexing the documents..."):
             store, n_chunks = rag_core.build_store(docs, api_key)
-        st.session_state.update(signature=signature, store=store, llm=rag_core.make_llm(api_key), n_chunks=n_chunks, history=[])
+        st.session_state.update(
+            signature=signature,
+            store=store,
+            llm=rag_core.make_llm(api_key),
+            n_chunks=n_chunks,
+            history=[]
+        )
     except Exception as e:
         st.session_state.pop("signature", None)
-        st.error(f"Could not index the documents ({type(e).__name__}). Check that your key is correct and try again.")
+        st.error(f"Could not index the documents ({type(e).__name__}: {e}). Check that your key is correct and try again.")
         st.stop()
+else:
+    # Always keep LLM refreshed with latest key and model config
+    st.session_state.llm = rag_core.make_llm(api_key)
 
 st.sidebar.write(f"Searching {source_label}: {len(docs)} pages, {st.session_state.n_chunks} chunks")
 
 # ---- chat ----
+if "history" not in st.session_state:
+    st.session_state.history = []
+
 for role, text, sources in st.session_state.history:
     with st.chat_message(role):
         st.write(text)
@@ -68,6 +84,6 @@ if question:
     try:
         answer, found = rag_core.ask(question, st.session_state.store, st.session_state.llm)
     except Exception as e:
-        answer, found = f"Something went wrong ({type(e).__name__}). Please try again in a minute.", []
+        answer, found = f"Something went wrong ({type(e).__name__}: {e}). Please try again in a minute.", []
     st.session_state.history.append(("assistant", answer, found))
     st.rerun()
