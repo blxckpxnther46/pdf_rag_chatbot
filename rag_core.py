@@ -8,7 +8,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
 EMBED_MODEL = "models/gemini-embedding-001"
-CHAT_MODEL = "gemini-2.5-flash"
+CHAT_MODEL = "gemini-1.5-flash"
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
 TOP_K = 4
